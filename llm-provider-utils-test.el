@@ -220,8 +220,8 @@
                                              :function (lambda (callback arg)
                                                          (funcall callback (format "Result for %s" arg)))
                                              :args '((:name "argument"
-                                                            :type integer
-                                                            :description "An argument"))
+                                                      :type integer
+                                                      :description "An argument"))
                                              :async t)))))
     (llm-provider-utils-execute-tool-uses
      (make-llm-testing-provider)
@@ -237,8 +237,7 @@
        :args '((argument . "bar"))))
      t
      nil
-     #'ignore
-     (lambda (_ err) (error "Should not error: %s" err)))
+     #'ignore)
     (let* ((last-interaction (car (last (llm-chat-prompt-interactions prompt))))
            (tool-results (llm-chat-prompt-interaction-tool-results last-interaction)))
       (dolist (id '("1" "2"))
@@ -263,79 +262,84 @@
        :args nil))
      t
      nil
-     (lambda (r) (setq result r))
-     (lambda (_ err) (error "Should not error: %s" err)))
-    (should (equal result '(:tool-results (("a" . success)))))))
+     (lambda (r) (setq result r)))
+    (should (equal result
+                   '(:tool-results
+                     ((:id "1" :name "a" :status success :result success)))))))
 
 (ert-deftest llm-provider-utils-execute-tool-uses--missing-tool ()
-  (llm-provider-utils-execute-tool-uses
-   (make-llm-testing-provider)
-   (llm-make-chat-prompt
-    ""
-    :tools (list
-            (llm-make-tool
-             :name "tool-a"
-             :description "Tool A"
-             :function (lambda (&rest args) "Result A")
-             :args '())))
-   (list
-    (make-llm-provider-utils-tool-use
-     :id "1"
-     :name "tool-b"
-     :args '()))
-   nil
-   nil
-   (lambda (results) (ert-fail "Should not succeed."))
-   (lambda (type msg)
-     (should (equal type 'llm-tool-unknown-tool))
-     (should (stringp msg)))))
+  (let (result)
+    (llm-provider-utils-execute-tool-uses
+     (make-llm-testing-provider)
+     (llm-make-chat-prompt
+      ""
+      :tools (list
+              (llm-make-tool
+               :name "tool-a"
+               :description "Tool A"
+               :function (lambda (&rest args) "Result A")
+               :args '())))
+     (list
+      (make-llm-provider-utils-tool-use
+       :id "1"
+       :name "tool-b"
+       :args '()))
+     nil
+     nil
+     (lambda (value) (setq result value)))
+    (should (equal (plist-get (car result) :id) "1"))
+    (should (eq (plist-get (car result) :status) 'error))
+    (should (eq (plist-get (plist-get (car result) :error) :type)
+                'llm-tool-unknown-tool))))
 
 (ert-deftest llm-provider-utils-execute-tool-uses--unknown-arg ()
-  (llm-provider-utils-execute-tool-uses
-   (make-llm-testing-provider)
-   (llm-make-chat-prompt
-    ""
-    :tools (list
-            (llm-make-tool
-             :name "tool-a"
-             :description "Tool A"
-             :function (lambda (&rest args) "Result A")
-             :args '((:name "arg1" :type string :description "Argument 1")))))
-   (list
-    (make-llm-provider-utils-tool-use
-     :id "1"
-     :name "tool-a"
-     :args '((arg1 . "value1")
-             (arg2 . "value2"))))
-   nil
-   nil
-   (lambda (results) (ert-fail "Should not succeed."))
-   (lambda (type msg)
-     (should (equal type 'llm-tool-unknown-argument))
-     (should (stringp msg)))))
+  (let (result)
+    (llm-provider-utils-execute-tool-uses
+     (make-llm-testing-provider)
+     (llm-make-chat-prompt
+      ""
+      :tools (list
+              (llm-make-tool
+               :name "tool-a"
+               :description "Tool A"
+               :function (lambda (&rest args) "Result A")
+               :args '((:name "arg1" :type string :description "Argument 1")))))
+     (list
+      (make-llm-provider-utils-tool-use
+       :id "1"
+       :name "tool-a"
+       :args '((arg1 . "value1")
+               (arg2 . "value2"))))
+     nil
+     nil
+     (lambda (value) (setq result value)))
+    (should (eq (plist-get (car result) :status) 'error))
+    (should (eq (plist-get (plist-get (car result) :error) :type)
+                'llm-tool-unknown-argument))))
 
 (ert-deftest llm-provider-utils-execute-tool-uses--missing-arg ()
-  (llm-provider-utils-execute-tool-uses
-   (make-llm-testing-provider)
-   (llm-make-chat-prompt
-    ""
-    :tools (list
-            (llm-make-tool
-             :name "tool-a"
-             :description "Tool A"
-             :function (lambda (&rest args) "Result A")
-             :args '((:name "arg1" :type string :description "Argument 1")))))
-   (list
-    (make-llm-provider-utils-tool-use
-     :id "1"
-     :name "tool-a"
-     :args '()))
-   nil
-   nil
-   (lambda (results) (ert-fail "Should not succeed."))
-   (lambda (type msg)
-     (should (equal type 'llm-tool-missing-argument))
-     (should (stringp msg)))))
+  (let (result)
+    (llm-provider-utils-execute-tool-uses
+     (make-llm-testing-provider)
+     (llm-make-chat-prompt
+      ""
+      :tools (list
+              (llm-make-tool
+               :name "tool-a"
+               :description "Tool A"
+               :function (lambda (&rest args) "Result A")
+               :args '((:name "arg1" :type string :description "Argument 1")))))
+     (list
+      (make-llm-provider-utils-tool-use
+       :id "1"
+       :name "tool-a"
+       :args '()))
+     nil
+     nil
+     (lambda (value) (setq result value)))
+    (should (eq (plist-get (car result) :status) 'error))
+    (should (eq (plist-get (plist-get (car result) :error) :type)
+                'llm-tool-missing-argument))))
 
 (ert-deftest llm-provider-utils-execute-tool-uses--missing-optional-arg ()
   (llm-provider-utils-execute-tool-uses
@@ -355,10 +359,109 @@
      :args '()))
    nil
    nil
-   #'ignore
-   (lambda (type msg)
-     (ert-fail (format "Should not error: %s %s" type msg)))))
+   #'ignore))
 
+
+(ert-deftest llm-provider-utils-execute-tool-uses--mixed-results ()
+  (let* ((prompt
+          (llm-make-chat-prompt
+           ""
+           :tools
+           (list
+            (llm-make-tool :name "ok" :function (lambda () 42) :args nil)
+            (llm-make-tool :name "bad"
+                           :function (lambda () (error "Tool failed"))
+                           :args nil))))
+         result)
+    (llm-provider-utils-execute-tool-uses
+     (make-llm-testing-provider)
+     prompt
+     (list
+      (make-llm-provider-utils-tool-use :id "call-ok" :name "ok" :args nil)
+      (make-llm-provider-utils-tool-use :id "call-bad" :name "bad" :args nil))
+     nil
+     nil
+     (lambda (value) (setq result value)))
+    (should (equal (mapcar (lambda (outcome) (plist-get outcome :id)) result)
+                   '("call-ok" "call-bad")))
+    (should (eq (plist-get (nth 0 result) :status) 'success))
+    (should (= (plist-get (nth 0 result) :result) 42))
+    (should (eq (plist-get (nth 1 result) :status) 'error))
+    (should (eq (plist-get (plist-get (nth 1 result) :error) :type) 'error))
+    (should (string-match-p
+             "Tool failed"
+             (plist-get (plist-get (nth 1 result) :error) :message)))
+    (let* ((interaction (car (last (llm-chat-prompt-interactions prompt))))
+           (prompt-results (llm-chat-prompt-interaction-tool-results interaction)))
+      (should (equal (mapcar #'llm-chat-prompt-tool-result-call-id prompt-results)
+                     '("call-ok" "call-bad")))
+      (should (= (llm-chat-prompt-tool-result-result (nth 0 prompt-results)) 42))
+      (should (string-match-p
+               "Tool call failed (error): Tool failed"
+               (llm-chat-prompt-tool-result-result (nth 1 prompt-results)))))))
+
+(ert-deftest llm-provider-utils-execute-tool-uses--async-out-of-order ()
+  (let* (callbacks
+         result
+         (prompt
+          (llm-make-chat-prompt
+           ""
+           :tools
+           (list
+            (llm-make-tool
+             :name "async-tool"
+             :function (lambda (callback argument)
+                         (push (cons argument callback) callbacks))
+             :args '((:name "argument" :type string :description "An argument"))
+             :async t)))))
+    (llm-provider-utils-execute-tool-uses
+     (make-llm-testing-provider)
+     prompt
+     (list
+      (make-llm-provider-utils-tool-use
+       :id "first" :name "async-tool" :args '((argument . "first")))
+      (make-llm-provider-utils-tool-use
+       :id "second" :name "async-tool" :args '((argument . "second"))))
+     nil
+     nil
+     (lambda (value) (setq result value)))
+    (funcall (cdr (assoc "second" callbacks)) nil '(error "Async failure"))
+    (should-not result)
+    (funcall (cdr (assoc "first" callbacks)) "First result")
+    (should (equal (mapcar (lambda (outcome) (plist-get outcome :id)) result)
+                   '("first" "second")))
+    (should (eq (plist-get (nth 0 result) :status) 'success))
+    (should (equal (plist-get (nth 0 result) :result) "First result"))
+    (should (eq (plist-get (nth 1 result) :status) 'error))
+    (should (equal (plist-get (plist-get (nth 1 result) :error) :message)
+                   "Async failure"))))
+
+(ert-deftest llm-provider-utils-execute-tool-uses--generated-id-and-nil-result ()
+  (let* ((tool-use
+          (make-llm-provider-utils-tool-use :name "nil-result" :args nil))
+         (prompt
+          (llm-make-chat-prompt
+           ""
+           :tools
+           (list
+            (llm-make-tool :name "nil-result" :function (lambda () nil) :args nil))))
+         result)
+    (llm-provider-utils-execute-tool-uses
+     (make-llm-testing-provider)
+     prompt
+     (list tool-use)
+     t
+     (list :tool-uses (list tool-use))
+     (lambda (value) (setq result value)))
+    (let* ((tool-use-result (car (plist-get result :tool-uses)))
+           (outcome (car (plist-get result :tool-results)))
+           (id (plist-get outcome :id)))
+      (should (string-match-p "\\`llm-tool-call-[0-9]+\\'" id))
+      (should (equal (plist-get tool-use-result :id) id))
+      (should (equal (llm-provider-utils-tool-use-id tool-use) id))
+      (should (eq (plist-get outcome :status) 'success))
+      (should (plist-member outcome :result))
+      (should-not (plist-get outcome :result)))))
 
 (provide 'llm-provider-utils-test)
 ;;; llm-provider-utils-test.el ends here

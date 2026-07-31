@@ -191,8 +191,8 @@ Models can potentially return many types of information, though, so the ~multi-o
 The possible plist keys are:
    - ~:text~ , for the main textual output.
    - ~:reasoning~, for reasoning output, when the model provides it.
-   - ~:tool-uses~, the tools that the llm identified to be called, as a list of plists, with ~:name~ and ~:args~ values.
-   - ~:tool-results~, the results of calling the tools.
+   - ~:tool-uses~, the tools that the llm identified to be called, as a list of plists with ~:id~, ~:name~, and ~:args~ values.
+   - ~:tool-results~, a list of per-tool outcome plists.  Every outcome has ~:id~, ~:name~, and ~:status~; successful outcomes have ~:result~ and failed outcomes have ~:error~.
    - ~:input-tokens~, the number of input tokens, when available
    - ~:output-tokens~, the number of output tokens, when available
 
@@ -242,6 +242,8 @@ Conversations can take place by repeatedly calling ~llm-chat~ and its variants. 
 The interactions in a prompt may be modified by conversation or by the conversion of the context and examples to what the LLM understands.  Different providers require different things from the interactions.  Some can handle system prompts, some cannot.  Some require alternating user and assistant chat interactions, others can handle anything.  It's important that clients keep to behaviors that work on all providers.  Do not attempt to read or manipulate ~llm-chat-prompt-interactions~ after initially setting it up for the first time, because you are likely to make changes that only work for some providers.  Similarly, don't directly create a prompt with ~make-llm-chat-prompt~, because it is easy to create something that wouldn't work for all providers.
 ** Error handling
 The =llm= package defines several error symbols that can be signaled during operations. These errors follow a hierarchy, allowing you to catch errors at different levels of specificity.
+
+A failure associated with an individual tool call is instead returned as a tool outcome with ~:status error~ and an ~:error~ plist containing ~:type~ and ~:message~.  This allows one response to contain both successful and failed tool calls.  Tool errors are signaled only when they cannot be associated with an individual executable call, such as malformed provider output.
 
 *** Error hierarchy
 All LLM-related errors inherit from ~llm-error~:
@@ -333,22 +335,33 @@ The way to call tools is to attach a list of tools to the =tools= slot in the pr
 
 Note that tools have the same arguments and structure as the tool definitions in [[https://github.com/karthink/gptel][GTPel]].
 
-The various chat APIs will execute the functions defined in =tools= slot with the arguments supplied by the LLM. The chat functions will, Instead of returning (or passing to a callback) a string, instead a list will be returned of tool names and return values.  This is not technically an alist because the same tool might be used several times, so the =car= can be equivalent.
+The various chat APIs execute the functions in the prompt's =tools= slot with the arguments supplied by the LLM.  When tools are called, the chat function returns (or passes to its callback) one outcome plist per tool call.  Every outcome contains =:id=, =:name=, and a =:status= of either =success= or =error=.  A successful outcome contains =:result=; a failed outcome contains an =:error= plist with =:type= and =:message=.  The ID distinguishes repeated calls to the same tool.
 
-After the tool is called, the client could use the result, but if you want to proceed with the conversation, or get a textual response that accompany the function you should just send the prompt back with no modifications.  This is because the LLM gives the tool use to perform, and then expects to get back the results of that tool use.  The results were already executed at the end of the call which returned the tools used, which also stores the result of that execution in the prompt.  This is why it should be sent back without further modifications.
+After the tool is called, the client could use the result, but if you want to proceed with the conversation, or get a textual response that accompanies the function, you should send the prompt back with no modifications.  The tool outcomes, including readable results for failed calls, are already stored in the prompt.
 
-Tools will be called with vectors for array results, =nil= for false boolean results, and plists for objects.
+Tools are called with vectors for array results, =nil= for false boolean results, and plists for objects.  An asynchronous tool reports success by calling its completion callback with the result.  It can report failure by calling the callback with nil and an Emacs condition as a second argument.
 
-When tools are called, the result have, in =multi-output= mode will have output like the following:
+In =multi-output= mode, tool output has this form:
 
 #+begin_src emacs-lisp
-(:tool-uses ((:name "capital_of_country" :args (("country" . "France" ))))
-            :tool-results (("capital_of_country" . "Paris")))
+(:tool-uses ((:id "call-1"
+              :name "capital_of_country"
+              :args (("country" . "France")))
+             (:id "call-2"
+              :name "weather"
+              :args nil))
+ :tool-results ((:id "call-1"
+                 :name "capital_of_country"
+                 :status success
+                 :result "Paris")
+                (:id "call-2"
+                 :name "weather"
+                 :status error
+                 :error (:type llm-tool-missing-argument
+                         :message "Missing required argument 'city' for tool 'weather'"))))
 #+end_src
 
-The tool uses here comes from the LLM, whereas the tool results are the result of the elisp function that is executed as part of the tool use.
-
-Without =multi-output= the result will be just the tool results.
+The tool uses come from the LLM, whereas the tool results are the outcomes of executing them.  Without =multi-output=, the result is the same list of outcome plists stored under =:tool-results= above.
 
 Be aware that there is no gaurantee that the tool will be called correctly.  While the LLMs mostly get this right, they are trained on Javascript functions, so imitating Javascript names is recommended. So, "write_email" is a better name for a function than "write-email".
 

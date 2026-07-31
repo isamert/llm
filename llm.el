@@ -117,10 +117,11 @@ RESULT is the result of the tool use.  This is required."
 
 All fields are required.
 
-FUNCTION is a function to call.  The first argument for FUNCTION should
-take a callback that should be called back with the result, if ASYNC is
-non-nil.  The other arguments correspond to the arguments defined in the
-tool.
+FUNCTION is a function to call.  If ASYNC is non-nil, its first
+argument is a completion callback.  Call it with the result on success,
+or with nil and an Emacs condition as an optional second argument on
+failure.  The other arguments correspond to the arguments defined in
+the tool.
 
 NAME is a human readable name of the function.
 
@@ -383,10 +384,11 @@ need to override it."
   "Return a response to PROMPT from PROVIDER.
 PROMPT is a `llm-chat-prompt'.
 
-The response is a string response by the LLM when functions are
-not called.  If functions are called, the response is a list of
-conses of the function named called (as a symbol), and the
-corresponding result from calling it.
+The response is a string response by the LLM when tools are not
+called.  If tools are called, the response is a list of outcome
+plists.  Each outcome contains `:id', `:name', and `:status'.  A
+successful outcome contains `:result'; a failed outcome contains
+`:error', with its condition `:type' and `:message'.
 
 The prompt's interactions list will be updated to encode the
 conversation so far.
@@ -395,8 +397,8 @@ If MULTI-OUTPUT is non-nil the response is a plist with the possible
 keys: `text' (textual output), `reasoning' (reasoning that accompanies
 the output), `input-tokens' (the number of tokens in the input to the
 LLM), `output-tokens' (the number of tokens in the output of the LLM),
-`tool-uses' (a list of plists with tool `:name' and `:args'), and
-`tool-results' (an alist of results of a calling tools)"
+`tool-uses' (a list of plists with tool `:id', `:name', and `:args'),
+and `tool-results' (a list of per-tool outcome plists)"
   (ignore provider prompt multi-output)
   (signal 'not-implemented nil))
 
@@ -426,10 +428,11 @@ LLM), `output-tokens' (the number of tokens in the output of the LLM),
 (cl-defgeneric llm-chat-async (provider prompt response-callback error-callback &optional multi-output)
   "Call RESPONSE-CALLBACK with a response to PROMPT from PROVIDER.
 
-The response is a string response by the LLM when functions are
-not called.  If functions are called, the response is a list of
-conses of the function named called (as a symbol), and the
-corresponding result from calling it.
+The response is a string response by the LLM when tools are not
+called.  If tools are called, the response is a list of outcome
+plists.  Each outcome contains `:id', `:name', and `:status'.  A
+successful outcome contains `:result'; a failed outcome contains
+`:error', with its condition `:type' and `:message'.
 
 PROMPT is a `llm-chat-prompt'.
 
@@ -439,8 +442,8 @@ ERROR-CALLBACK receives the error response.
 
 If MULTI-OUTPUT is non-nil the response is a plist with the possible
 keys: `text' (textual output), `reasoning' (reasoning that accompanies
-the output) `tool-uses' (a list of plists with tool `:name' and
-`:args'), and `tool-results' (an alist of results of a calling tools)
+the output), `tool-uses' (a list of plists with tool `:id', `:name',
+and `:args'), and `tool-results' (a list of per-tool outcome plists)
 
 The prompt's interactions list will be updated to encode the
 conversation so far.
@@ -485,10 +488,11 @@ be passed to `llm-cancel-request'."
   "Stream a response to PROMPT from PROVIDER.
 PROMPT is a `llm-chat-prompt'.
 
-The response is a string response by the LLM when functions are
-not called.  If functions are called, the response is a list of
-conses of the function named called (as a symbol), and the
-corresponding result from calling it.
+The response is a string response by the LLM when tools are not
+called.  If tools are called, the response is a list of outcome
+plists.  Each outcome contains `:id', `:name', and `:status'.  A
+successful outcome contains `:result'; a failed outcome contains
+`:error', with its condition `:type' and `:message'.
 
 PARTIAL-CALLBACK is called with the output of the string response
 as it is built up.  The callback is called with the entire
@@ -507,8 +511,8 @@ ERROR-CALLBACK receives the error response.
 
 If MULTI-OUTPUT is non-nil the response is a plist with the possible
 keys: `text' (textual output), `reasoning' (reasoning that accompanies
-the output) `tool-uses' (a list of plists with tool `:name' and
-`:args'), and `tool-results' (an alist of results of a calling tools)
+the output), `tool-uses' (a list of plists with tool `:id', `:name',
+and `:args'), and `tool-results' (a list of per-tool outcome plists)
 
 The prompt's interactions list will be updated to encode the
 conversation so far.

@@ -91,8 +91,18 @@
    :tool-options (make-llm-tool-options :tool-choice 'any)))
 
 (defconst llm-integration-test-fc-answer
-  '(("capital_of_country" . "France"))
-  "The correct answer to the function call prompt.")
+  "France"
+  "The correct result from the function call prompt.")
+
+(defun llm-integration-test--verify-tool-outcomes (outcomes)
+  "Verify OUTCOMES from `llm-integration-test-tool-use-prompt'."
+  (should (= (length outcomes) 1))
+  (let ((outcome (car outcomes)))
+    (should (stringp (plist-get outcome :id)))
+    (should (equal (plist-get outcome :name) "capital_of_country"))
+    (should (eq (plist-get outcome :status) 'success))
+    (should (equal (plist-get outcome :result)
+                   llm-integration-test-fc-answer))))
 
 (defun llm-integration-test-fc-multiple-prompt ()
   (llm-make-chat-prompt
@@ -361,9 +371,8 @@ else.  We really just want to see if it's in the right ballpark."
 (llm-def-integration-test llm-tool-use (provider)
   (when (member 'tool-use (llm-capabilities provider))
     (let ((prompt (llm-integration-test-tool-use-prompt)))
-      (should (equal
-               (llm-chat provider prompt)
-               llm-integration-test-fc-answer))
+      (llm-integration-test--verify-tool-outcomes
+       (llm-chat provider prompt))
       (llm-integration-test--verify-prompt prompt)
       ;; Test that we can send the function back to the provider without error.
       (llm-chat provider prompt))))
@@ -396,9 +405,8 @@ else.  We really just want to see if it's in the right ballpark."
   (when (member 'tool-use (llm-capabilities provider))
     (let* ((prompt (llm-integration-test-tool-use-prompt))
            (result (llm-chat provider prompt t)))
-      (should (equal
-               (plist-get result :tool-results)
-               llm-integration-test-fc-answer))
+      (llm-integration-test--verify-tool-outcomes
+       (plist-get result :tool-results))
       (should (plist-get result :tool-uses))
       (if (plist-get result :text)
           (should (> (length (plist-get result :text)) 0)))
@@ -413,9 +421,8 @@ else.  We really just want to see if it's in the right ballpark."
       (llm-chat-streaming provider prompt #'ignore (lambda (response) (setq result response)) (lambda (_ err) (error err)) t)
       (while (null result)
         (sleep-for 0.1))
-      (should (equal
-               (plist-get result :tool-results)
-               llm-integration-test-fc-answer))
+      (llm-integration-test--verify-tool-outcomes
+       (plist-get result :tool-results))
       (should (plist-get result :tool-uses))
       (llm-integration-test--verify-prompt prompt)
       (if (plist-get result :text)
